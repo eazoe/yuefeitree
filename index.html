@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>岳飞家谱</title>
+    <style>
+        /* --- 基础样式 --- */
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background-color: #f4f6f8;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            color: #333;
+        }
+        
+        /* --- 顶部控制栏 --- */
+        .controls { 
+            max-width: 1100px;
+            margin: 0 auto 30px auto;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 100;
+        }
+        
+        .app-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mode-badge {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+        .mode-view { background: #e9ecef; color: #495057; border: 1px solid #ced4da;}
+        .mode-edit { background: #fff3cd; color: #856404; border: 1px solid #ffeeba;}
+
+        .btn-group { display: flex; gap: 8px; align-items: center; }
+
+        .btn-control {
+            padding: 8px 15px; cursor: pointer;
+            border: 1px solid #ddd; background: #f8f9fa; border-radius: 4px;
+            transition: 0.2s; font-size: 14px;
+        }
+        .btn-control:hover { background: #e2e6ea; }
+        .btn-primary { background: #007bff !important; color: white !important; border-color: #007bff !important; }
+        .btn-primary:hover { background: #0056b3 !important; }
+        
+        .admin-only { display: none; } 
+
+        .switch-mode-btn {
+            border: 1px solid #007bff; color: #007bff; background: white;
+        }
+        .switch-mode-btn.active {
+            background: #007bff; color: white;
+        }
+
+        /* --- 树状图容器 --- */
+        .tree-wrapper {
+            width: 100%;
+            overflow: auto;
+            padding-bottom: 100px; 
+            cursor: grab;
+            position: relative; 
+        }
+        .tree { 
+            display: inline-block; 
+            min-width: 100%;
+            position: relative;
+            z-index: 2; 
+        }
+        
+        /* --- 核心树状图 CSS (间距优化版) --- */
+        .tree ul {
+            /* 每一代之间的上间距，从20px增加到40px */
+            padding-top: 40px; 
+            position: relative;
+            transition: all 0.5s;
+            display: flex; justify-content: center;
+            white-space: nowrap;
+        }
+        .tree li {
+            float: left; text-align: center;
+            list-style-type: none;
+            position: relative;
+            /* 每一代之间的节点间距，从20px增加到40px */
+            padding: 40px 5px 0 5px;
+            transition: all 0.5s;
+        }
+        /* 连线样式 */
+        .tree li::before, .tree li::after {
+            content: ''; position: absolute; top: 0; right: 50%;
+            border-top: 1px solid #ccc; width: 50%; 
+            /* 垂直连接线高度，从20px增加到40px */
+            height: 40px; 
+        }
+        .tree li::after { right: auto; left: 50%; border-left: 1px solid #ccc; }
+        .tree li:only-child::after, .tree li:only-child::before { display: none; }
+        .tree li:only-child { padding-top: 0; }
+        .tree li:first-child::before, .tree li:last-child::after { border: 0 none; }
+        .tree li:last-child::before{ border-right: 1px solid #ccc; border-radius: 0 5px 0 0; }
+        .tree li:first-child::after{ border-radius: 5px 0 0 0; }
+        
+        /* 向下的连接线 */
+        .tree ul ul::before{
+            content: ''; position: absolute; top: 0; left: 50%;
+            border-left: 1px solid #ccc; width: 0; 
+            /* 垂直连接线高度，从20px增加到40px */
+            height: 40px; 
+        }
+
+        /* --- 人物卡片 --- */
+        .member-card {
+            border: 1px solid #ccc;
+            padding: 12px 10px;
+            text-decoration: none;
+            color: #666;
+            background: white;
+            display: inline-block;
+            border-radius: 6px;
+            min-width: 190px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+            transition: all 0.3s ease;
+            cursor: pointer; 
+            z-index: 2; 
+            overflow: hidden; 
+        }
+
+        /* 编辑模式下，卡片底部永久预留空间 */
+        body.edit-mode-active .member-card {
+            padding-bottom: 36px; 
+            border-color: #b3d7ff;
+        }
+
+        .member-card:hover {
+            background: #e3f2fd; border-color: #007bff;
+            transform: scale(1.05); z-index: 10;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+        }
+        .member-card:hover + ul .member-card {
+            background: #f1f8ff; border-color: #b3d7ff;
+        }
+        .card-name { font-weight: bold; font-size: 16px; color: #333; margin-bottom: 6px; display: block; }
+        .card-info { font-size: 11px; color: #666; margin-bottom: 0px; display: block; }
+
+        /* --- 卡片操作条 (常设版) --- */
+        .card-actions-static {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            height: 32px;
+            background: #f1f8ff;
+            border-top: 1px solid #dae0e5;
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            gap: 3px; 
+            z-index: 5;
+        }
+        
+        /* 编辑模式下直接显示 */
+        body.edit-mode-active .card-actions-static {
+            display: flex;
+        }
+
+        .btn-static-action {
+            border: none; border-radius: 3px;
+            color: white; font-size: 10px; padding: 4px 6px;
+            cursor: pointer; line-height: 1;
+            white-space: nowrap;
+        }
+        .btn-s-add { background: #28a745; }
+        .btn-s-edit { background: #007bff; }
+        .btn-s-del { background: #dc3545; }
+        .btn-s-insert { background: #6610f2; } /* 紫色：加父辈 */
+        
+        .btn-static-action:hover { filter: brightness(1.1); transform: scale(1.05); }
+
+        /* --- 代数辅助层 --- */
+        #generation-guides {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 1; overflow: hidden;
+        }
+        /* 去掉了 .gen-line (虚线)，只保留标签 */
+        .gen-label {
+            position: absolute; left: 10px; font-size: 12px; font-weight: bold;
+            color: #007bff; background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px; border-radius: 12px; border: 1px solid #e3f2fd;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 5;
+        }
+
+        /* --- 弹窗样式 --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 2000;
+            justify-content: center; align-items: center;
+            backdrop-filter: blur(2px);
+        }
+        .modal-box {
+            background: white; padding: 25px; border-radius: 12px;
+            width: 450px; max-width: 90%; text-align: left;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            position: relative;
+            animation: modalFadeIn 0.3s ease;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .close-btn {
+            position: absolute; top: 15px; right: 15px;
+            background: none; border: none; font-size: 20px; color: #aaa; cursor: pointer;
+        }
+        .close-btn:hover { color: #333; }
+
+        .view-header { text-align: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px; }
+        .view-name { font-size: 24px; font-weight: bold; color: #333; margin: 0; }
+        .view-gen { font-size: 13px; color: #007bff; background: #e3f2fd; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 5px;}
+        .view-row { margin-bottom: 10px; color: #555; font-size: 14px; display: flex; }
+        .view-label { font-weight: bold; width: 90px; color: #333; flex-shrink: 0;}
+        .view-content { flex-grow: 1; line-height: 1.5; white-space: pre-wrap;}
+        
+        .view-actions { 
+            display: none; 
+            margin-top: 25px; justify-content: space-between; border-top: 1px solid #eee; padding-top: 20px; gap: 10px;
+        }
+        .btn-action { flex: 1; border: none; padding: 10px 0; border-radius: 6px; cursor: pointer; font-size: 13px; transition: 0.2s;}
+        .btn-add-child { background: #28a745; color: white; }
+        .btn-add-child:hover { background: #218838; }
+        .btn-edit-info { background: #007bff; color: white; }
+        .btn-edit-info:hover { background: #0056b3; }
+        .btn-del-mem { background: #fff; color: #dc3545; border: 1px solid #dc3545; max-width: 80px;}
+        .btn-del-mem:hover { background: #ffeef0; }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: bold; }
+        /* 下拉菜单样式 */
+        .form-group select, .form-group input, .form-group textarea { 
+            width: 100%; padding: 10px; box-sizing: border-box; 
+            border: 1px solid #ddd; border-radius: 6px; 
+            font-family: inherit; font-size: 14px;
+            background-color: #fff;
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: #007bff; outline: none; }
+        .form-group textarea { height: 80px; resize: vertical; }
+        
+        .flex-row { display: flex; gap: 10px; }
+        .flex-col { flex: 1; }
+
+        .modal-buttons { text-align: right; margin-top: 20px; }
+        .btn-cancel { background: #6c757d; color: white; margin-right: 10px; padding: 8px 16px; border:none; border-radius:6px; cursor:pointer;}
+        .btn-save { background: #28a745; color: white; padding: 8px 16px; border:none; border-radius:6px; cursor:pointer;}
+        .btn-save:hover { background: #218838; }
+
+        #fileInput { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <div class="app-title">
+        岳飞家谱 
+        <span class="mode-badge mode-view" id="modeBadge">查看模式</span>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-control btn-primary admin-only" onclick="downloadData()">💾 导出备份</button>
+        <button class="btn-control admin-only" onclick="document.getElementById('fileInput').click()">📂 导入文件</button>
+        
+        <button class="btn-control switch-mode-btn" onclick="toggleEditMode()" id="btnToggleMode">⚙️ 进入编辑模式</button>
+    </div>
+    <input type="file" id="fileInput" accept=".json" onchange="importData(this)">
+</div>
+
+<div class="tree-wrapper">
+    <div id="generation-guides"></div>
+    <div class="tree" id="family-tree-container"></div>
+</div>
+
+<!-- 弹窗 1: 查看详情 -->
+<div id="viewModal" class="modal-overlay" onclick="closeAllModals(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <button class="close-btn" onclick="closeAllModals()">×</button>
+        <div class="view-header">
+            <div class="view-name" id="viewName">姓名</div>
+            <div class="view-gen" id="viewGen">代数</div>
+        </div>
+        <div class="view-row">
+            <div class="view-label">🎂 生日:</div>
+            <div class="view-content" id="viewBirth">-</div>
+        </div>
+        <div class="view-row">
+            <div class="view-label">📍 籍贯:</div>
+            <div class="view-content" id="viewHometown">-</div>
+        </div>
+        <div class="view-row">
+            <div class="view-label">🏠 居住地:</div>
+            <div class="view-content" id="viewResidence">-</div>
+        </div>
+        <div class="view-row">
+            <div class="view-label">📝 生平:</div>
+            <div class="view-content" id="viewBio">暂无介绍</div>
+        </div>
+        
+        <div class="view-actions" id="viewActionButtons">
+            <button class="btn-action btn-add-child" onclick="addMemberFromModal()">+ 新增下级</button>
+            <button class="btn-action btn-edit-info" onclick="switchToEditMode()">✎ 编辑信息</button>
+            <button class="btn-action btn-del-mem" id="btnDeleteMember" onclick="handleDelete()">🗑 删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- 弹窗 2: 编辑表单 -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 style="margin-top:0; text-align:center;" id="editModalTitle">编辑成员信息</h3>
+        <div class="form-group">
+            <label>姓名：</label>
+            <input type="text" id="inputName" placeholder="请输入姓名">
+        </div>
+        
+        <div class="form-group">
+            <label>第几代：</label>
+            <select id="inputGeneration"></select>
+        </div>
+
+        <div class="form-group">
+            <label>出生日期：</label>
+            <input type="date" id="inputBirth">
+        </div>
+
+        <div class="form-group">
+            <label>籍贯 (祖籍)：</label>
+            <div class="flex-row">
+                <select class="flex-col" id="inputHomeProv" onchange="updateCityOptions('inputHomeProv', 'inputHomeCity')">
+                    <option value="">省份</option>
+                </select>
+                <select class="flex-col" id="inputHomeCity">
+                    <option value="">城市</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>当前居住地：</label>
+            <div class="flex-row">
+                <select class="flex-col" id="inputResProv" onchange="updateCityOptions('inputResProv', 'inputResCity')">
+                    <option value="">省份</option>
+                </select>
+                <select class="flex-col" id="inputResCity">
+                    <option value="">城市</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>生平/备注：</label>
+            <textarea id="inputBio" placeholder="在此输入生平事迹或其他备注..."></textarea>
+        </div>
+        <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeAllModals()">取消</button>
+            <button class="btn-save" onclick="saveMemberData()">💾 保存修改</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chinaCityData = {
+        "北京市": ["北京市"], "天津市": ["天津市"], "上海市": ["上海市"], "重庆市": ["重庆市"],
+        "河北省": ["石家庄市","唐山市","秦皇岛市","邯郸市","邢台市","保定市","张家口市","承德市","沧州市","廊坊市","衡水市"],
+        "山西省": ["太原市","大同市","阳泉市","长治市","晋城市","朔州市","晋中市","运城市","忻州市","临汾市","吕梁市"],
+        "河南省": ["郑州市","开封市","洛阳市","平顶山市","安阳市","鹤壁市","新乡市","焦作市","濮阳市","许昌市","漯河市","三门峡市","南阳市","商丘市","信阳市","周口市","驻马店市"],
+        "湖北省": ["武汉市","黄石市","十堰市","宜昌市","襄阳市","鄂州市","荆门市","孝感市","荆州市","黄冈市","咸宁市","随州市"],
+        "湖南省": ["长沙市","株洲市","湘潭市","衡阳市","邵阳市","岳阳市","常德市","张家界市","益阳市","郴州市","永州市","怀化市","娄底市"],
+        "广东省": ["广州市","韶关市","深圳市","珠海市","汕头市","佛山市","江门市","湛江市","茂名市","肇庆市","惠州市","梅州市","汕尾市","河源市","阳江市","清远市","东莞市","中山市","潮州市","揭阳市","云浮市"],
+        "江苏省": ["南京市","无锡市","徐州市","常州市","苏州市","南通市","连云港市","淮安市","盐城市","扬州市","镇江市","泰州市","宿迁市"],
+        "浙江省": ["杭州市","宁波市","温州市","嘉兴市","湖州市","绍兴市","金华市","衢州市","舟山市","台州市","丽水市"],
+        "安徽省": ["合肥市","芜湖市","蚌埠市","淮南市","马鞍山市","淮北市","铜陵市","安庆市","黄山市","滁州市","阜阳市","宿州市","六安市","亳州市","池州市","宣城市"],
+        "福建省": ["福州市","厦门市","莆田市","三明市","泉州市","漳州市","南平市","龙岩市","宁德市"],
+        "江西省": ["南昌市","景德镇市","萍乡市","九江市","新余市","鹰潭市","赣州市","吉安市","宜春市","抚州市","上饶市"],
+        "山东省": ["济南市","青岛市","淄博市","枣庄市","东营市","烟台市","潍坊市","济宁市","泰安市","威海市","日照市","临沂市","德州市","聊城市","滨州市","菏泽市"],
+        "四川省": ["成都市","自贡市","攀枝花市","泸州市","德阳市","绵阳市","广元市","遂宁市","内江市","乐山市","南充市","眉山市","宜宾市","广安市","达州市","雅安市","巴中市","资阳市"],
+        "陕西省": ["西安市","铜川市","宝鸡市","咸阳市","渭南市","延安市","汉中市","榆林市","安康市","商洛市"],
+        "其他": ["其他"]
+    };
+
+    const STORAGE_KEY = 'yuefei_family_tree_v18'; 
+    let familyData = {};
+    let nextId = 100;
+    let currentActiveId = null; 
+    let isAddingNew = false;
+    let isInsertingParent = false; 
+    let isEditMode = false; 
+
+    const defaultData = {
+        id: 1, name: "岳飞", generation: "第1代", birthDate: "1103-03-24",
+        hometownProv: "河南省", hometownCity: "安阳市", 
+        residenceProv: "", residenceCity: "",
+        bio: "字鹏举，宋相州汤阴县人。南宋抗金名将。",
+        children: [
+            { 
+                id: 2, name: "岳云", generation: "第2代", birthDate: "1119-01-01", bio: "岳飞长子，与父一同遇害。", 
+                children: [
+                    { id: 101, name: "岳甫", generation: "第3代", birthDate: "", children: [] },
+                    { id: 102, name: "岳申", generation: "第3代", birthDate: "", children: [] }
+                ] 
+            },
+            { 
+                id: 3, name: "岳雷", generation: "第2代", birthDate: "", bio: "岳飞次子。", children: [] 
+            }
+        ]
+    };
+
+    function initData() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                familyData = parsed.data;
+                nextId = parsed.nextId;
+            } catch (e) {
+                familyData = JSON.parse(JSON.stringify(defaultData));
+            }
+        } else {
+            familyData = JSON.parse(JSON.stringify(defaultData));
+        }
+        initDropdowns(); 
+        refreshView();
+        updateModeUI();
+    }
+
+    function initDropdowns() {
+        const genSelect = document.getElementById('inputGeneration');
+        genSelect.innerHTML = '';
+        for (let i = 1; i <= 50; i++) {
+            let opt = document.createElement('option');
+            opt.value = `第${i}代`;
+            opt.innerText = `第${i}代`;
+            genSelect.appendChild(opt);
+        }
+        populateProvince('inputHomeProv');
+        populateProvince('inputResProv');
+    }
+
+    function populateProvince(selectId) {
+        const select = document.getElementById(selectId);
+        select.innerHTML = '<option value="">请选择省份</option>';
+        for (let prov in chinaCityData) {
+            let opt = document.createElement('option');
+            opt.value = prov;
+            opt.innerText = prov;
+            select.appendChild(opt);
+        }
+    }
+
+    window.updateCityOptions = function(provSelectId, citySelectId, selectedCity = null) {
+        const provSelect = document.getElementById(provSelectId);
+        const citySelect = document.getElementById(citySelectId);
+        const prov = provSelect.value;
+        citySelect.innerHTML = '<option value="">请选择城市</option>';
+        if (prov && chinaCityData[prov]) {
+            chinaCityData[prov].forEach(city => {
+                let opt = document.createElement('option');
+                opt.value = city;
+                opt.innerText = city;
+                citySelect.appendChild(opt);
+            });
+        }
+        if (selectedCity) citySelect.value = selectedCity;
+    };
+
+    function saveToLocal() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: familyData, nextId: nextId }));
+    }
+
+    window.toggleEditMode = function() {
+        isEditMode = !isEditMode;
+        updateModeUI();
+    };
+
+    function updateModeUI() {
+        const badge = document.getElementById('modeBadge');
+        const btn = document.getElementById('btnToggleMode');
+        const adminBtns = document.querySelectorAll('.admin-only');
+
+        if (isEditMode) {
+            badge.innerText = "编辑模式"; badge.className = "mode-badge mode-edit";
+            btn.innerText = "👁 退出编辑模式"; btn.className = "btn-control switch-mode-btn active";
+            adminBtns.forEach(el => el.style.display = 'block');
+            document.body.classList.add('edit-mode-active');
+        } else {
+            badge.innerText = "查看模式"; badge.className = "mode-badge mode-view";
+            btn.innerText = "⚙️ 进入编辑模式"; btn.className = "btn-control switch-mode-btn";
+            adminBtns.forEach(el => el.style.display = 'none');
+            document.body.classList.remove('edit-mode-active');
+        }
+        setTimeout(drawGenerationGuides, 100);
+    }
+
+    function formatDateCN(dateStr) {
+        if (!dateStr) return "";
+        const parts = dateStr.split('-');
+        if (parts.length !== 3) return dateStr;
+        return `出生日期：${parts[0]}年${parts[1]}月${parts[2]}日`;
+    }
+
+    function renderTreeHTML(node, depth = 1) {
+        if (!node) return '';
+        
+        let birthInfo = formatDateCN(node.birthDate);
+        let deleteBtn = node.id === familyData.id ? '' : `<button class="btn-static-action btn-s-del" onclick="event.stopPropagation(); quickDelete(${node.id})">删除</button>`;
+        
+        // 插入父辈按钮：仅在深度>2显示
+        let insertParentBtn = '';
+        if (depth > 2) {
+            insertParentBtn = `<button class="btn-static-action btn-s-insert" title="在此人与父亲之间插入一代" onclick="event.stopPropagation(); quickInsertParent(${node.id})">加父辈</button>`;
+        }
+
+        let html = `
+            <li>
+                <div class="member-card" data-depth="${depth}" onclick="openViewModal(${node.id})">
+                    <span class="card-name">${node.name}</span>
+                    <span class="card-gen" style="display:none;">${node.generation}</span>
+                    <span class="card-info" style="font-size:10px;">${birthInfo}</span>
+                    
+                    <div class="card-actions-static">
+                        ${insertParentBtn}
+                        <button class="btn-static-action btn-s-add" onclick="event.stopPropagation(); quickAdd(${node.id})">新增</button>
+                        <button class="btn-static-action btn-s-edit" onclick="event.stopPropagation(); quickEdit(${node.id})">编辑</button>
+                        ${deleteBtn}
+                    </div>
+                </div>
+        `;
+
+        if (node.children && node.children.length > 0) {
+            html += '<ul>';
+            node.children.forEach(child => {
+                html += renderTreeHTML(child, depth + 1);
+            });
+            html += '</ul>';
+        }
+        html += `</li>`;
+        return html;
+    }
+
+    function refreshView() {
+        document.getElementById('family-tree-container').innerHTML = '<ul>' + renderTreeHTML(familyData) + '</ul>';
+        setTimeout(drawGenerationGuides, 50); 
+    }
+
+    function findParent(root, childId) {
+        if (!root.children) return null;
+        for (let child of root.children) {
+            if (child.id === childId) return root;
+            let found = findParent(child, childId);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    function findNode(root, id) {
+        if (root.id === id) return root;
+        if (root.children) {
+            for (let child of root.children) {
+                let found = findNode(child, id);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    // --- 快速操作 ---
+    window.quickAdd = function(id) { currentActiveId = id; addMemberFromModal(); };
+    window.quickEdit = function(id) { currentActiveId = id; switchToEditMode(); };
+    window.quickDelete = function(id) { currentActiveId = id; handleDelete(); };
+    
+    window.quickInsertParent = function(id) {
+        currentActiveId = id;
+        isInsertingParent = true; 
+        isAddingNew = false;
+        
+        document.getElementById('viewModal').style.display = 'none';
+        document.getElementById('editModalTitle').innerText = "插入上一代 (父辈)";
+        
+        document.getElementById('inputName').value = "";
+        document.getElementById('inputBirth').value = "";
+        document.getElementById('inputBio').value = "";
+        document.getElementById('inputHomeProv').value = "";
+        document.getElementById('inputHomeCity').innerHTML = '<option value="">城市</option>';
+        document.getElementById('inputResProv').value = "";
+        document.getElementById('inputResCity').innerHTML = '<option value="">城市</option>';
+
+        let node = findNode(familyData, id);
+        if(node) {
+            document.getElementById('inputGeneration').value = node.generation;
+        }
+
+        document.getElementById('editModal').style.display = 'flex';
+    };
+
+    function shiftGenerations(node) {
+        if (!node) return;
+        if (node.generation) {
+            let genNum = parseInt(node.generation.replace(/[^0-9]/g, ''));
+            if (!isNaN(genNum)) {
+                node.generation = `第${genNum + 1}代`;
+            }
+        }
+        if (node.children) {
+            node.children.forEach(child => shiftGenerations(child));
+        }
+    }
+
+    function drawGenerationGuides() {
+        const guideContainer = document.getElementById('generation-guides');
+        guideContainer.innerHTML = ''; 
+        const cards = document.querySelectorAll('.member-card');
+        if (cards.length === 0) return;
+        const depthTops = {};
+        let maxDepth = 0;
+        cards.forEach(card => {
+            const depth = parseInt(card.getAttribute('data-depth'));
+            const rect = card.getBoundingClientRect();
+            const containerRect = document.querySelector('.tree-wrapper').getBoundingClientRect();
+            const relativeTop = rect.top - containerRect.top + document.querySelector('.tree-wrapper').scrollTop;
+            if (!depthTops[depth]) depthTops[depth] = [];
+            depthTops[depth].push(relativeTop);
+            if (depth > maxDepth) maxDepth = depth;
+        });
+        const avgTops = {};
+        for (let d = 1; d <= maxDepth; d++) {
+            if (depthTops[d]) avgTops[d] = depthTops[d].reduce((a, b) => a + b, 0) / depthTops[d].length;
+        }
+        
+        // 仅绘制左侧标签，不画线
+        for (let d = 1; d <= maxDepth; d++) {
+            const currentTop = avgTops[d];
+            let labelText = `第 ${d} 代`; 
+            const sampleCard = document.querySelector(`.member-card[data-depth="${d}"]`);
+            if (sampleCard) {
+                const genSpan = sampleCard.querySelector('.card-gen');
+                if (genSpan) labelText = genSpan.innerText;
+            }
+            const label = document.createElement('div');
+            label.className = 'gen-label'; 
+            label.innerText = labelText; 
+            label.style.top = (currentTop + 10) + 'px'; 
+            guideContainer.appendChild(label);
+        }
+    }
+    window.addEventListener('resize', drawGenerationGuides);
+
+
+    // --- 弹窗逻辑 ---
+    window.openViewModal = function(id) {
+        let node = findNode(familyData, id);
+        if (!node) return;
+        currentActiveId = id;
+
+        document.getElementById('viewName').innerText = node.name;
+        document.getElementById('viewGen').innerText = node.generation || "未填写";
+        document.getElementById('viewBirth').innerText = formatDateCN(node.birthDate) || "未填写";
+        document.getElementById('viewBio').innerText = node.bio || "暂无详细介绍";
+        
+        let hometown = (node.hometownProv || "") + (node.hometownCity ? " - " + node.hometownCity : "");
+        document.getElementById('viewHometown').innerText = hometown || "未填写";
+        
+        let residence = (node.residenceProv || "") + (node.residenceCity ? " - " + node.residenceCity : "");
+        document.getElementById('viewResidence').innerText = residence || "未填写";
+
+        const actionButtons = document.getElementById('viewActionButtons');
+        if (isEditMode) {
+            actionButtons.style.display = 'flex';
+            if (id === familyData.id) {
+                 document.getElementById('btnDeleteMember').style.display = 'none';
+            } else {
+                 document.getElementById('btnDeleteMember').style.display = 'inline-block';
+            }
+        } else {
+            actionButtons.style.display = 'none';
+        }
+        document.getElementById('viewModal').style.display = 'flex';
+    };
+
+    window.switchToEditMode = function() {
+        let node = findNode(familyData, currentActiveId);
+        if (!node) return;
+        isAddingNew = false;
+        isInsertingParent = false;
+        document.getElementById('viewModal').style.display = 'none';
+        document.getElementById('editModalTitle').innerText = "编辑成员信息";
+        
+        document.getElementById('inputName').value = node.name;
+        document.getElementById('inputGeneration').value = node.generation || "第1代"; 
+        document.getElementById('inputBirth').value = node.birthDate || "";
+        document.getElementById('inputBio').value = node.bio || "";
+
+        document.getElementById('inputHomeProv').value = node.hometownProv || "";
+        updateCityOptions('inputHomeProv', 'inputHomeCity', node.hometownCity); 
+
+        document.getElementById('inputResProv').value = node.residenceProv || "";
+        updateCityOptions('inputResProv', 'inputResCity', node.residenceCity);
+
+        document.getElementById('editModal').style.display = 'flex';
+    };
+
+    window.addMemberFromModal = function() {
+        isAddingNew = true;
+        isInsertingParent = false;
+        document.getElementById('viewModal').style.display = 'none';
+        document.getElementById('editModalTitle').innerText = "新增家庭成员";
+        
+        document.getElementById('inputName').value = "";
+        document.getElementById('inputBirth').value = "";
+        document.getElementById('inputBio').value = "";
+        document.getElementById('inputHomeProv').value = "";
+        document.getElementById('inputHomeCity').innerHTML = '<option value="">城市</option>';
+        document.getElementById('inputResProv').value = "";
+        document.getElementById('inputResCity').innerHTML = '<option value="">城市</option>';
+
+        let parent = findNode(familyData, currentActiveId);
+        if (parent && parent.generation) {
+            let genNum = parseInt(parent.generation.replace(/[^0-9]/g, ''));
+            if (!isNaN(genNum)) {
+                document.getElementById('inputGeneration').value = `第${genNum + 1}代`;
+            } else {
+                document.getElementById('inputGeneration').value = "第1代";
+            }
+        }
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    window.closeAllModals = function(e) {
+        if (!e || e.target === document.getElementById('viewModal') || e.target === document.getElementById('editModal') || !e.target) {
+            document.getElementById('viewModal').style.display = 'none';
+            document.getElementById('editModal').style.display = 'none';
+        }
+    };
+
+    window.saveMemberData = function() {
+        let name = document.getElementById('inputName').value;
+        let generation = document.getElementById('inputGeneration').value;
+        let birth = document.getElementById('inputBirth').value;
+        let bio = document.getElementById('inputBio').value;
+        let hProv = document.getElementById('inputHomeProv').value;
+        let hCity = document.getElementById('inputHomeCity').value;
+        let rProv = document.getElementById('inputResProv').value;
+        let rCity = document.getElementById('inputResCity').value;
+
+        if (!name) { alert("姓名不能为空！"); return; }
+
+        let dataToUpdate = {
+            name: name,
+            generation: generation,
+            birthDate: birth,
+            bio: bio,
+            hometownProv: hProv,
+            hometownCity: hCity,
+            residenceProv: rProv,
+            residenceCity: rCity
+        };
+
+        if (isInsertingParent) {
+             let childNode = findNode(familyData, currentActiveId);
+             let parentNode = findParent(familyData, currentActiveId);
+             
+             if (childNode && parentNode) {
+                 let idx = parentNode.children.findIndex(c => c.id === childNode.id);
+                 if (idx > -1) {
+                     parentNode.children.splice(idx, 1);
+                     let newId = nextId++;
+                     let newParent = Object.assign({ id: newId, children: [childNode] }, dataToUpdate);
+                     parentNode.children.push(newParent); 
+                     shiftGenerations(childNode);
+                     saveToLocal();
+                     refreshView();
+                 }
+             }
+             document.getElementById('editModal').style.display = 'none';
+        }
+        else if (isAddingNew) {
+            let parent = findNode(familyData, currentActiveId);
+            if (parent) {
+                let newId = nextId++;
+                let newMember = Object.assign({ id: newId, children: [] }, dataToUpdate);
+                if (!parent.children) parent.children = [];
+                parent.children.push(newMember);
+                saveToLocal();
+                refreshView();
+                document.getElementById('editModal').style.display = 'none';
+            }
+        } 
+        else {
+            let node = findNode(familyData, currentActiveId);
+            if (node) {
+                Object.assign(node, dataToUpdate); 
+                saveToLocal();
+                refreshView();
+                document.getElementById('editModal').style.display = 'none';
+            }
+        }
+    };
+
+    window.handleDelete = function() {
+        if (currentActiveId === 1) return;
+        if(!confirm("确定要删除此人（包括所有后代）吗？此操作无法撤销。")) return;
+        deleteNodeRecursive(familyData, currentActiveId);
+        saveToLocal();
+        refreshView();
+        closeAllModals(); 
+    };
+
+    function deleteNodeRecursive(parent, childId) {
+        if (parent.children) {
+            const index = parent.children.findIndex(c => c.id === childId);
+            if (index > -1) {
+                parent.children.splice(index, 1);
+                return true;
+            }
+            for (let child of parent.children) {
+                if (deleteNodeRecursive(child, childId)) return true;
+            }
+        }
+        return false;
+    }
+
+    window.downloadData = function() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({data: familyData, nextId: nextId}, null, 2));
+        const link = document.createElement('a');
+        link.href = dataStr; link.download = "岳飞家谱数据.json";
+        link.click();
+    };
+
+    window.importData = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                if(parsed.data) {
+                    if(confirm("确认导入？当前数据将被覆盖。")) {
+                        familyData = parsed.data;
+                        nextId = parsed.nextId || 100;
+                        saveToLocal();
+                        initData();
+                    }
+                }
+            } catch(err) { alert("文件无效"); }
+            input.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    initData();
+
+</script>
+
+</body>
+</html>
